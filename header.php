@@ -25,5 +25,11 @@
         <button class="nav-btn" data-target="archive">Архив</button>
     </nav>
 </header>
+<div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="assertive" aria-busy="true">
+    <div class="loading-box">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <span id="loading-text">Загрузка...</span>
+    </div>
+</div>
 <div id="server-status" class="status-banner status-info hidden" role="status" aria-live="polite"></div>
 <main>
