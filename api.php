@@ -45,6 +45,13 @@ function validate_base64_content($value, string $field, int $maxBytes): ?string
 
 function validate_payload(array $payload): ?string
 {
+    if (!array_key_exists('version', $payload)) {
+        return 'Поле version обязательно для отправки состояния';
+    }
+    if (!is_int($payload['version']) || $payload['version'] < 1) {
+        return 'Поле version должно быть положительным целым числом';
+    }
+
     $cards = $payload['cards'] ?? [];
     $ops = $payload['ops'] ?? [];
     $centers = $payload['centers'] ?? [];
@@ -237,6 +244,12 @@ try {
             exit;
         }
         $current = fetch_state($pdo);
+        $incomingVersion = $payload['version'] ?? 0;
+        if ($incomingVersion !== ($current['version'] ?? 0)) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Данные устарели, перезагрузите страницу', 'expectedVersion' => $current['version'] ?? null]);
+            exit;
+        }
         $incoming = [
             'cards' => $payload['cards'] ?? [],
             'ops' => $payload['ops'] ?? [],
@@ -244,8 +257,10 @@ try {
         ];
         $incoming = merge_snapshots($current, $incoming);
         ensure_operation_codes($incoming);
-        save_state($pdo, $incoming);
-        echo json_encode(['status' => 'ok']);
+        $newVersion = ($current['version'] ?? 0) + 1;
+        $incoming['version'] = $newVersion;
+        save_state($pdo, $incoming, $newVersion);
+        echo json_encode(['status' => 'ok', 'version' => $newVersion]);
         exit;
     }
 
