@@ -3,7 +3,8 @@ require_once __DIR__ . '/config.php';
 
 function gen_id(string $prefix): string
 {
-    return $prefix . '_' . base_convert((string)microtime(true), 10, 36) . '_' . substr(bin2hex(random_bytes(4)), 0, 8);
+    $micros = (int)round(microtime(true) * 1000000);
+    return $prefix . '_' . base_convert((string)$micros, 10, 36) . '_' . substr(bin2hex(random_bytes(4)), 0, 8);
 }
 
 function compute_ean13_check_digit(string $base12): string
