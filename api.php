@@ -33,7 +33,13 @@ function validate_base64_content($value, string $field, int $maxBytes): ?string
     if (!is_string($value)) {
         return "Поле {$field} должно быть строкой";
     }
-    $decoded = base64_decode($value, true);
+
+    $base64Content = $value;
+    if (preg_match('/^data:[^;]+;base64,(.+)$/', $value, $matches)) {
+        $base64Content = $matches[1];
+    }
+
+    $decoded = base64_decode($base64Content, true);
     if ($decoded === false) {
         return "Поле {$field} должно быть корректной строкой base64";
     }
