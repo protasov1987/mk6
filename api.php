@@ -4,6 +4,8 @@ require_once __DIR__ . '/storage.php';
 header('Content-Type: application/json; charset=utf-8');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+require_auth();
+
 try {
     if ($method === 'GET') {
         $state = fetch_state($pdo);
@@ -13,6 +15,7 @@ try {
     }
 
     if ($method === 'POST') {
+        validate_csrf();
         $raw = file_get_contents('php://input');
         $payload = json_decode($raw, true);
         if (!is_array($payload)) {
