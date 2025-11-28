@@ -1,14 +1,9 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-class SnapshotConflictException extends RuntimeException
-{
-}
-
 function gen_id(string $prefix): string
 {
-    $micros = (int)round(microtime(true) * 1000000);
-    return $prefix . '_' . base_convert((string)$micros, 10, 36) . '_' . substr(bin2hex(random_bytes(4)), 0, 8);
+    return $prefix . '_' . base_convert((string)microtime(true), 10, 36) . '_' . substr(bin2hex(random_bytes(4)), 0, 8);
 }
 
 function compute_ean13_check_digit(string $base12): string
@@ -96,7 +91,6 @@ function create_route_op_from_refs(array $op, array $center, string $executor = 
 
 function build_default_data(): array
 {
-    $version = 1;
     $centers = [
         ['id' => gen_id('wc'), 'name' => 'Механическая обработка', 'desc' => 'Токарные и фрезерные операции'],
         ['id' => gen_id('wc'), 'name' => 'Покрытия / напыление', 'desc' => 'Покрытия, термическое напыление'],
@@ -133,7 +127,7 @@ function build_default_data(): array
         ],
     ]];
 
-    return ['version' => $version, 'cards' => $cards, 'ops' => $ops, 'centers' => $centers];
+    return ['cards' => $cards, 'ops' => $ops, 'centers' => $centers];
 }
 
 function deep_clone($value)
@@ -146,40 +140,6 @@ function merge_snapshots(array $current, array $incoming): array
     $existingCards = $current['cards'] ?? [];
     $incomingCards = $incoming['cards'] ?? [];
 
-    $currentOps = $current['ops'] ?? [];
-    $incomingOps = $incoming['ops'] ?? [];
-
-    $usedCodes = [];
-    $codeOwners = [];
-
-    foreach ($currentOps as $op) {
-        $code = $op['code'] ?? '';
-        if ($code === '') {
-            continue;
-        }
-        $codeOwners[$code] = $op['id'] ?? $code;
-        $usedCodes[] = $code;
-    }
-
-    foreach ($incomingOps as &$op) {
-        $code = $op['code'] ?? '';
-        $opId = $op['id'] ?? null;
-        $ownerKey = $opId ?: uniqid('incoming_', true);
-
-        if ($code !== '') {
-            $owner = $codeOwners[$code] ?? null;
-            if ($owner !== null && $owner !== $ownerKey) {
-                $op['code'] = generate_unique_op_code($usedCodes);
-                if (in_array($op['code'], $usedCodes, true)) {
-                    throw new SnapshotConflictException('Не удалось сгенерировать уникальный код операции');
-                }
-            }
-            $codeOwners[$op['code']] = $ownerKey;
-            $usedCodes[] = $op['code'];
-        }
-    }
-    unset($op);
-
     $mergedCards = array_map(function ($card) use ($existingCards) {
         $existing = null;
         foreach ($existingCards as $c) {
@@ -189,10 +149,6 @@ function merge_snapshots(array $current, array $incoming): array
             }
         }
         $next = deep_clone($card);
-        if (!isset($next['attachments']) || !is_array($next['attachments'])) {
-            $next['attachments'] = [];
-        }
-        $next['attachments'] = sanitize_card_attachments($next['attachments']);
         $next['createdAt'] = $existing['createdAt'] ?? ($next['createdAt'] ?? round(microtime(true) * 1000));
         if (!isset($next['logs']) || !is_array($next['logs'])) {
             $next['logs'] = [];
@@ -208,7 +164,6 @@ function merge_snapshots(array $current, array $incoming): array
     }, $incomingCards);
 
     $incoming['cards'] = $mergedCards;
-    $incoming['ops'] = $incomingOps;
     return $incoming;
 }
 

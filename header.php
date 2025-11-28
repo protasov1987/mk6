@@ -4,13 +4,9 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="csrf-token" content="<?php echo htmlspecialchars(get_csrf_token(), ENT_QUOTES); ?>" />
     <title>Трекер маршрутных карт ТСЗП</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link rel="stylesheet" href="style.css" />
-    <script>
-        window.CSRF_TOKEN = '<?php echo htmlspecialchars(get_csrf_token(), ENT_QUOTES); ?>';
-    </script>
 </head>
 <body>
 <header>
@@ -25,11 +21,5 @@
         <button class="nav-btn" data-target="archive">Архив</button>
     </nav>
 </header>
-<div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="assertive" aria-busy="true">
-    <div class="loading-box">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <span id="loading-text">Загрузка...</span>
-    </div>
-</div>
 <div id="server-status" class="status-banner status-info hidden" role="status" aria-live="polite"></div>
 <main>

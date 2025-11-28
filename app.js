@@ -1,6 +1,5 @@
 // === КОНСТАНТЫ И ГЛОБАЛЬНЫЕ МАССИВЫ ===
 const API_ENDPOINT = '/api.php';
-const CSRF_TOKEN = window.CSRF_TOKEN || (document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
 let cards = [];
 let ops = [];
@@ -19,29 +18,8 @@ let cardsSearchTerm = '';
 let attachmentContext = null;
 const ATTACH_ACCEPT = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.rar,.7z';
 const ATTACH_MAX_SIZE = 15 * 1024 * 1024; // 15 MB
-const FIELD_LIMITS = {
-  card: {
-    name: 160,
-    orderNo: 80,
-    drawing: 120,
-    material: 160,
-    desc: 2000
-  },
-  op: {
-    code: 24,
-    name: 160,
-    desc: 600
-  },
-  route: {
-    executor: 160,
-    notes: 600
-  }
-};
 let logContextCardId = null;
 let clockIntervalId = null;
-let snapshotVersion = 0;
-let pollIntervalId = null;
-const POLL_INTERVAL_MS = 15000;
 
 function setConnectionStatus(message, variant = 'info') {
   const banner = document.getElementById('server-status');
@@ -68,49 +46,6 @@ function startRealtimeClock() {
   update();
   if (clockIntervalId) clearInterval(clockIntervalId);
   clockIntervalId = setInterval(update, 1000);
-}
-
-function toggleInteractiveDisabled(disabled) {
-  const controls = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
-  controls.forEach(ctrl => {
-    if (disabled) {
-      if (!ctrl.dataset.wasDisabled) {
-        ctrl.dataset.wasDisabled = ctrl.disabled ? 'true' : 'false';
-      }
-      ctrl.disabled = true;
-    } else if (ctrl.dataset.wasDisabled) {
-      ctrl.disabled = ctrl.dataset.wasDisabled === 'true';
-      delete ctrl.dataset.wasDisabled;
-    }
-  });
-}
-
-function setLoadingState(isLoading, message = 'Загрузка...') {
-  const overlay = document.getElementById('loading-overlay');
-  const text = document.getElementById('loading-text');
-  if (!overlay || !text) return;
-
-  if (isLoading) {
-    overlay.classList.remove('hidden');
-    text.textContent = message;
-  } else {
-    overlay.classList.add('hidden');
-    text.textContent = '';
-  }
-}
-
-function beginRequest(message = 'Загрузка...') {
-  activeRequests++;
-  setLoadingState(true, message);
-  toggleInteractiveDisabled(true);
-}
-
-function endRequest() {
-  activeRequests = Math.max(0, activeRequests - 1);
-  if (activeRequests === 0) {
-    setLoadingState(false);
-    toggleInteractiveDisabled(false);
-  }
 }
 
 // === УТИЛИТЫ ===
@@ -203,80 +138,6 @@ function toSafeCount(val) {
   const num = parseInt(val, 10);
   if (!Number.isFinite(num) || num < 0) return 0;
   return num;
-}
-
-function getValidationBox(container) {
-  if (!container) return null;
-  let box = container.querySelector('[data-validation-box="true"]');
-  if (!box) {
-    box = document.createElement('div');
-    box.dataset.validationBox = 'true';
-    box.style.background = '#fee2e2';
-    box.style.color = '#991b1b';
-    box.style.border = '1px solid #fecaca';
-    box.style.padding = '8px 10px';
-    box.style.borderRadius = '6px';
-    box.style.marginBottom = '10px';
-    box.style.fontSize = '14px';
-    box.style.display = 'none';
-    container.prepend(box);
-  }
-  return box;
-}
-
-function showValidationMessage(container, message) {
-  const box = getValidationBox(container);
-  if (!box) return;
-  box.textContent = message;
-  box.style.display = 'block';
-  box.classList.remove('hidden');
-}
-
-function clearValidationMessage(container) {
-  if (!container) return;
-  const box = container.querySelector('[data-validation-box="true"]');
-  if (!box) return;
-  box.textContent = '';
-  box.style.display = 'none';
-  box.classList.add('hidden');
-}
-
-function validateLength(value, limit, label) {
-  if (value && value.length > limit) {
-    return `${label} не должно превышать ${limit} символов.`;
-  }
-  return '';
-}
-
-function validateCardInputs(values) {
-  if (!values.name) return 'Заполните наименование карты.';
-  if (!values.name.trim()) return 'Наименование карты не может состоять только из пробелов.';
-  const lengthErrors = [
-    validateLength(values.name, FIELD_LIMITS.card.name, 'Наименование карты'),
-    validateLength(values.orderNo, FIELD_LIMITS.card.orderNo, 'Номер заказа'),
-    validateLength(values.drawing, FIELD_LIMITS.card.drawing, 'Чертёж / обозначение'),
-    validateLength(values.material, FIELD_LIMITS.card.material, 'Материал'),
-    validateLength(values.desc, FIELD_LIMITS.card.desc, 'Описание')
-  ].filter(Boolean);
-  return lengthErrors[0] || '';
-}
-
-function validateRouteInputs(values) {
-  const errors = [
-    validateLength(values.executor, FIELD_LIMITS.route.executor, 'Имя исполнителя'),
-    validateLength(values.notes, FIELD_LIMITS.route.notes, 'Комментарий')
-  ].filter(Boolean);
-  return errors[0] || '';
-}
-
-function validateOpDirectoryInputs(values) {
-  if (!values.name) return 'Введите название операции.';
-  const errors = [
-    validateLength(values.code, FIELD_LIMITS.op.code, 'Код операции'),
-    validateLength(values.name, FIELD_LIMITS.op.name, 'Название операции'),
-    validateLength(values.desc, FIELD_LIMITS.op.desc, 'Описание операции')
-  ].filter(Boolean);
-  return errors[0] || '';
 }
 
 function ensureAttachments(card) {
@@ -551,7 +412,7 @@ function setupBarcodeModal() {
 }
 
 // === МОДЕЛЬ ОПЕРАЦИИ МАРШРУТА ===
-function createRouteOpFromRefs(op, center, executor, plannedMinutes, order, comment = '') {
+function createRouteOpFromRefs(op, center, executor, plannedMinutes, order) {
   return {
     id: genId('rop'),
     opId: op.id,
@@ -569,7 +430,7 @@ function createRouteOpFromRefs(op, center, executor, plannedMinutes, order, comm
     actualSeconds: null,
     elapsedSeconds: 0,
     order: order || 1,
-    comment: comment || '',
+    comment: '',
     goodCount: 0,
     scrapCount: 0,
     holdCount: 0
@@ -739,80 +600,27 @@ function ensureOperationCodes() {
   });
 }
 
-function mergeCollectionsById(current = [], incoming = []) {
-  const incomingIds = new Set();
-  const merged = incoming.map(item => {
-    const id = item && item.id ? item.id : null;
-    const existing = current.find(entry => entry && entry.id === id);
-    if (id) incomingIds.add(id);
-    return existing ? { ...existing, ...item } : { ...item };
-  });
-  current.forEach(item => {
-    if (!item || !item.id) return;
-    if (!incomingIds.has(item.id)) {
-      merged.push({ ...item });
-    }
-  });
-  return merged;
-}
-
-function applyServerSnapshot(payload) {
-  const incomingCards = Array.isArray(payload.cards) ? payload.cards : [];
-  const incomingOps = Array.isArray(payload.ops) ? payload.ops : [];
-  const incomingCenters = Array.isArray(payload.centers) ? payload.centers : [];
-
-  centers = mergeCollectionsById(centers, incomingCenters);
-  ops = mergeCollectionsById(ops, incomingOps);
-  cards = mergeCollectionsById(cards, incomingCards).map(card => {
-    const next = { ...card };
-    ensureAttachments(next);
-    ensureCardMeta(next);
-    recalcCardStatus(next);
-    return next;
-  });
-  ensureOperationCodes();
-  renderEverything();
-}
-
 // === ХРАНИЛИЩЕ ===
 async function saveData() {
-  if (!apiOnline) {
-    setConnectionStatus('Сервер недоступен — изменения не сохраняются. Проверьте, что запущен server.js.', 'error');
-    return;
-  }
-
-  beginRequest('Сохранение данных...');
   try {
-    const res = await fetch(API_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': CSRF_TOKEN
-      },
-      body: JSON.stringify({ version: snapshotVersion || 1, cards, ops, centers })
-    });
-    if (res.status === 409) {
-      const payload = await res.json().catch(() => ({}));
-      const serverVersion = typeof payload.currentVersion === 'number' ? payload.currentVersion : null;
-      if (serverVersion) snapshotVersion = serverVersion;
-      setConnectionStatus('Данные устарели. Обновляем состояние…', 'warning');
-      await fetchLatestSnapshot({ forceApply: true });
+    if (!apiOnline) {
+      setConnectionStatus('Сервер недоступен — изменения не сохраняются. Проверьте, что запущен server.js.', 'error');
       return;
     }
+
+    const res = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards, ops, centers })
+    });
     if (!res.ok) {
       throw new Error('Ответ сервера ' + res.status);
-    }
-    const payload = await res.json().catch(() => ({}));
-    if (payload && typeof payload.version === 'number') {
-      snapshotVersion = payload.version;
     }
     setConnectionStatus('', 'info');
   } catch (err) {
     apiOnline = false;
     setConnectionStatus('Не удалось сохранить данные на сервер: ' + err.message, 'error');
     console.error('Ошибка сохранения данных на сервер', err);
-  } finally {
-    endRequest();
   }
 }
 
@@ -866,14 +674,10 @@ function ensureDefaults() {
 }
 
 async function loadData() {
-  beginRequest('Загрузка данных...');
   try {
-    const res = await fetch(API_ENDPOINT, {
-      headers: CSRF_TOKEN ? { 'X-CSRF-Token': CSRF_TOKEN } : undefined
-    });
+    const res = await fetch(API_ENDPOINT);
     if (!res.ok) throw new Error('Ответ сервера ' + res.status);
     const payload = await res.json();
-    snapshotVersion = typeof payload.version === 'number' ? payload.version : 1;
     cards = Array.isArray(payload.cards) ? payload.cards : [];
     ops = Array.isArray(payload.ops) ? payload.ops : [];
     centers = Array.isArray(payload.centers) ? payload.centers : [];
@@ -882,11 +686,10 @@ async function loadData() {
   } catch (err) {
     console.warn('Не удалось загрузить данные с сервера, используем пустые коллекции', err);
     apiOnline = false;
-    setConnectionStatus('Нет соединения с сервером: данные будут только в этой сессии. ' + err.message, 'error');
+    setConnectionStatus('Нет соединения с сервером: данные будут только в этой сессии', 'error');
     cards = [];
     ops = [];
     centers = [];
-    snapshotVersion = snapshotVersion || 1;
   }
 
   ensureDefaults();
@@ -926,38 +729,6 @@ async function loadData() {
   if (apiOnline) {
     await saveData();
   }
-}
-
-async function fetchLatestSnapshot(options = {}) {
-  const { silent = false, forceApply = false } = options;
-  try {
-    const res = await fetch(API_ENDPOINT, {
-      headers: CSRF_TOKEN ? { 'X-CSRF-Token': CSRF_TOKEN } : undefined
-    });
-    if (!res.ok) throw new Error('Ответ сервера ' + res.status);
-    const payload = await res.json();
-    const incomingVersion = typeof payload.version === 'number' ? payload.version : snapshotVersion;
-    apiOnline = true;
-    if (incomingVersion && (forceApply || incomingVersion > snapshotVersion)) {
-      snapshotVersion = incomingVersion;
-      applyServerSnapshot(payload);
-    }
-    if (!silent) {
-      setConnectionStatus('', 'info');
-    }
-  } catch (err) {
-    apiOnline = false;
-    if (!silent) {
-      setConnectionStatus('Не удалось получить обновлённые данные: ' + err.message, 'error');
-    }
-  }
-}
-
-function startPolling() {
-  if (pollIntervalId) clearInterval(pollIntervalId);
-  pollIntervalId = setInterval(() => {
-    fetchLatestSnapshot({ silent: true });
-  }, POLL_INTERVAL_MS);
 }
 
 // === РЕНДЕРИНГ ДАШБОРДА ===
@@ -1248,8 +1019,6 @@ function openCardModal(cardId) {
   if (attachBtn) {
     attachBtn.innerHTML = '📎 Файлы (' + (activeCardDraft.attachments ? activeCardDraft.attachments.length : 0) + ')';
   }
-  clearValidationMessage(document.getElementById('card-form'));
-  clearValidationMessage(document.getElementById('route-form'));
   routeOpCodeFilter = '';
   const routeFilterInput = document.getElementById('route-op-code-filter');
   if (routeFilterInput) {
@@ -1312,28 +1081,15 @@ function saveCardDraft() {
 }
 
 function syncCardDraftFromForm() {
-  if (!activeCardDraft) return false;
-  const form = document.getElementById('card-form');
-  const name = document.getElementById('card-name').value.trim();
+  if (!activeCardDraft) return;
+  activeCardDraft.name = document.getElementById('card-name').value.trim();
   const qtyRaw = document.getElementById('card-qty').value.trim();
-  const orderNo = document.getElementById('card-order').value.trim();
-  const drawing = document.getElementById('card-drawing').value.trim();
-  const material = document.getElementById('card-material').value.trim();
-  const desc = document.getElementById('card-desc').value.trim();
-  const validationError = validateCardInputs({ name, orderNo, drawing, material, desc });
-  if (validationError) {
-    showValidationMessage(form, validationError);
-    return false;
-  }
-  clearValidationMessage(form);
   const qtyVal = qtyRaw === '' ? '' : Math.max(0, parseInt(qtyRaw, 10) || 0);
-  activeCardDraft.name = name;
   activeCardDraft.quantity = Number.isFinite(qtyVal) ? qtyVal : '';
-  activeCardDraft.orderNo = orderNo;
-  activeCardDraft.drawing = drawing;
-  activeCardDraft.material = material;
-  activeCardDraft.desc = desc;
-  return true;
+  activeCardDraft.orderNo = document.getElementById('card-order').value.trim();
+  activeCardDraft.drawing = document.getElementById('card-drawing').value.trim();
+  activeCardDraft.material = document.getElementById('card-material').value.trim();
+  activeCardDraft.desc = document.getElementById('card-desc').value.trim();
 }
 
 function logCardDifferences(original, updated) {
@@ -1466,19 +1222,17 @@ async function addAttachmentsFromFiles(fileList) {
   const beforeCount = card.attachments.length;
   const filesArray = Array.from(fileList);
   const allowed = ATTACH_ACCEPT.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
-  const modalBody = document.querySelector('#attachments-modal .modal-body') || document.getElementById('card-form');
-  clearValidationMessage(modalBody);
   const newFiles = [];
 
   for (const file of filesArray) {
     const ext = ('.' + (file.name.split('.').pop() || '')).toLowerCase();
     if (allowed.length && !allowed.includes(ext)) {
-      showValidationMessage(modalBody, 'Тип файла не поддерживается: ' + file.name + '. Выберите допустимый формат.');
-      return;
+      alert('Тип файла не поддерживается: ' + file.name);
+      continue;
     }
     if (file.size > ATTACH_MAX_SIZE) {
-      showValidationMessage(modalBody, 'Файл ' + file.name + ' превышает лимит ' + formatBytes(ATTACH_MAX_SIZE) + '.');
-      return;
+      alert('Файл ' + file.name + ' превышает лимит ' + formatBytes(ATTACH_MAX_SIZE));
+      continue;
     }
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1513,7 +1267,6 @@ function openAttachmentsModal(cardId, source = 'live') {
   if (!modal) return;
   const card = source === 'draft' ? activeCardDraft : cards.find(c => c.id === cardId);
   if (!card) return;
-  clearValidationMessage(modal.querySelector('.modal-body'));
   attachmentContext = { cardId: card.id, source };
   renderAttachmentsModal();
   modal.classList.remove('hidden');
@@ -2681,7 +2434,7 @@ function setupForms() {
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       if (!activeCardDraft) return;
-      if (!syncCardDraftFromForm()) return;
+      syncCardDraftFromForm();
       document.getElementById('card-status-text').textContent = cardStatusText(activeCardDraft);
       saveCardDraft();
     });
@@ -2691,7 +2444,7 @@ function setupForms() {
   if (printDraftBtn) {
     printDraftBtn.addEventListener('click', () => {
       if (!activeCardDraft) return;
-      if (!syncCardDraftFromForm()) return;
+      syncCardDraftFromForm();
       printCardView(activeCardDraft, { blankQuantities: true });
     });
   }
@@ -2710,21 +2463,13 @@ function setupForms() {
     const centerId = document.getElementById('route-center').value;
     const executor = document.getElementById('route-executor').value.trim();
     const planned = parseInt(document.getElementById('route-planned').value, 10) || 30;
-    const notes = document.getElementById('route-notes').value.trim();
-    const routeForm = document.getElementById('route-form');
-    const routeError = validateRouteInputs({ executor, notes });
-    if (routeError) {
-      showValidationMessage(routeForm, routeError);
-      return;
-    }
-    clearValidationMessage(routeForm);
     const opRef = ops.find(o => o.id === opId);
     const centerRef = centers.find(c => c.id === centerId);
     if (!opRef || !centerRef) return;
     const maxOrder = activeCardDraft.operations && activeCardDraft.operations.length
       ? Math.max.apply(null, activeCardDraft.operations.map(o => o.order || 0))
       : 0;
-    const rop = createRouteOpFromRefs(opRef, centerRef, executor, planned, maxOrder + 1, notes);
+    const rop = createRouteOpFromRefs(opRef, centerRef, executor, planned, maxOrder + 1);
     activeCardDraft.operations = activeCardDraft.operations || [];
     activeCardDraft.operations.push(rop);
     document.getElementById('card-status-text').textContent = cardStatusText(activeCardDraft);
@@ -2759,17 +2504,11 @@ function setupForms() {
         const name = document.getElementById('op-name').value.trim();
         const desc = document.getElementById('op-desc').value.trim();
         const time = parseInt(document.getElementById('op-time').value, 10) || 30;
-        const opForm = document.getElementById('op-form');
-        const opError = validateOpDirectoryInputs({ code: codeInput, name, desc });
-        if (opError) {
-          showValidationMessage(opForm, opError);
-          return;
-        }
-        clearValidationMessage(opForm);
+        if (!name) return;
         const used = collectUsedOpCodes();
         let code = codeInput;
         if (code && used.has(code)) {
-          showValidationMessage(opForm, 'Такой код операции уже используется. Введите другой код.');
+          alert('Такой код операции уже используется. Введите другой код.');
           return;
         }
         if (!code) {
@@ -2903,5 +2642,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupLogModal();
   renderEverything();
   setInterval(tickTimers, 1000);
-  startPolling();
 });
