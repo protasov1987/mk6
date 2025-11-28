@@ -2,3 +2,5 @@ node_modules
 npm-debug.log*
 /data/data.json
 /data/database.json
+/backups/
+*.sqlite

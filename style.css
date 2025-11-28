@@ -133,6 +133,47 @@ nav {
   display: none;
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+  backdrop-filter: blur(2px);
+}
+
+.loading-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  min-width: 220px;
+  justify-content: center;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid #e5e7eb;
+  border-top-color: #10b981;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 main {
   padding: 16px;
   max-width: 1200px;
@@ -254,6 +295,15 @@ table {
   border-collapse: collapse;
   font-size: 13px;
   margin-top: 8px;
+}
+
+#cards-table-wrapper,
+#workorders-table-wrapper,
+#archive-table-wrapper,
+#centers-table-wrapper,
+#ops-table-wrapper,
+#log-table-wrapper {
+  overflow-x: auto;
 }
 
 th,
@@ -829,13 +879,105 @@ footer {
   font-weight: 500;
 }
 
+@media (max-width: 1024px) {
+  nav {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .nav-btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .summary-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .card-info-block,
+  .card-meta-grid,
+  .route-form-grid,
+  .log-card-header,
+  .log-card-meta,
+  .directory-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   header {
     flex-direction: column;
     align-items: flex-start;
   }
 
+  main {
+    padding: 12px;
+  }
+
   table {
     font-size: 12px;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  th,
+  td {
+    white-space: nowrap;
+  }
+
+  nav {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .nav-btn {
+    width: 100%;
+    text-align: left;
+  }
+
+  .summary-line {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .summary-text {
+    width: 100%;
+  }
+
+  .cards-subtabs,
+  .cards-toolbar .button-group {
+    width: 100%;
+  }
+
+  .cards-subtabs {
+    gap: 6px;
+  }
+
+  .cards-subtabs .subtab-btn {
+    flex: 1 1 48%;
+    text-align: center;
+  }
+
+  .table-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .summary-actions {
+    width: 100%;
+  }
+
+  .wo-card summary {
+    padding: 12px;
+  }
+
+  .stats {
+    gap: 8px;
+  }
+
+  .card-info-block .info-row {
+    align-items: flex-start;
   }
 }
