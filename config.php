@@ -75,8 +75,9 @@ $db_name = getenv('DB_NAME') ?: 'cc226439_bd';
 $db_user = getenv('DB_USER') ?: 'cc226439_bd';
 $db_pass = getenv('DB_PASS') ?: '12345';
 $db_port = getenv('DB_PORT') ?: '3306';
+$db_dsn = getenv('DB_DSN') ?: null;
 
-$dsn = "mysql:host={$db_host};port={$db_port};dbname={$db_name};charset=utf8mb4";
+$dsn = $db_dsn ?: "mysql:host={$db_host};port={$db_port};dbname={$db_name};charset=utf8mb4";
 
 try {
     $pdo = new PDO($dsn, $db_user, $db_pass, [
