@@ -188,6 +188,10 @@ function merge_snapshots(array $current, array $incoming): array
             }
         }
         $next = deep_clone($card);
+        if (!isset($next['attachments']) || !is_array($next['attachments'])) {
+            $next['attachments'] = [];
+        }
+        $next['attachments'] = sanitize_card_attachments($next['attachments']);
         $next['createdAt'] = $existing['createdAt'] ?? ($next['createdAt'] ?? round(microtime(true) * 1000));
         if (!isset($next['logs']) || !is_array($next['logs'])) {
             $next['logs'] = [];
