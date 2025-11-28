@@ -21,6 +21,7 @@ const ATTACH_ACCEPT = '.pdf,.doc,.docx,.jpg,.jpeg,.png,.zip,.rar,.7z';
 const ATTACH_MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 let logContextCardId = null;
 let clockIntervalId = null;
+let activeRequests = 0;
 
 function setConnectionStatus(message, variant = 'info') {
   const banner = document.getElementById('server-status');
@@ -47,6 +48,49 @@ function startRealtimeClock() {
   update();
   if (clockIntervalId) clearInterval(clockIntervalId);
   clockIntervalId = setInterval(update, 1000);
+}
+
+function toggleInteractiveDisabled(disabled) {
+  const controls = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+  controls.forEach(ctrl => {
+    if (disabled) {
+      if (!ctrl.dataset.wasDisabled) {
+        ctrl.dataset.wasDisabled = ctrl.disabled ? 'true' : 'false';
+      }
+      ctrl.disabled = true;
+    } else if (ctrl.dataset.wasDisabled) {
+      ctrl.disabled = ctrl.dataset.wasDisabled === 'true';
+      delete ctrl.dataset.wasDisabled;
+    }
+  });
+}
+
+function setLoadingState(isLoading, message = 'Загрузка...') {
+  const overlay = document.getElementById('loading-overlay');
+  const text = document.getElementById('loading-text');
+  if (!overlay || !text) return;
+
+  if (isLoading) {
+    overlay.classList.remove('hidden');
+    text.textContent = message;
+  } else {
+    overlay.classList.add('hidden');
+    text.textContent = '';
+  }
+}
+
+function beginRequest(message = 'Загрузка...') {
+  activeRequests++;
+  setLoadingState(true, message);
+  toggleInteractiveDisabled(true);
+}
+
+function endRequest() {
+  activeRequests = Math.max(0, activeRequests - 1);
+  if (activeRequests === 0) {
+    setLoadingState(false);
+    toggleInteractiveDisabled(false);
+  }
 }
 
 // === УТИЛИТЫ ===
@@ -603,12 +647,13 @@ function ensureOperationCodes() {
 
 // === ХРАНИЛИЩЕ ===
 async function saveData() {
-  try {
-    if (!apiOnline) {
-      setConnectionStatus('Сервер недоступен — изменения не сохраняются. Проверьте, что запущен server.js.', 'error');
-      return;
-    }
+  if (!apiOnline) {
+    setConnectionStatus('Сервер недоступен — изменения не сохраняются. Проверьте, что запущен server.js.', 'error');
+    return;
+  }
 
+  beginRequest('Сохранение данных...');
+  try {
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -625,6 +670,8 @@ async function saveData() {
     apiOnline = false;
     setConnectionStatus('Не удалось сохранить данные на сервер: ' + err.message, 'error');
     console.error('Ошибка сохранения данных на сервер', err);
+  } finally {
+    endRequest();
   }
 }
 
@@ -678,6 +725,7 @@ function ensureDefaults() {
 }
 
 async function loadData() {
+  beginRequest('Загрузка данных...');
   try {
     const res = await fetch(API_ENDPOINT, {
       headers: CSRF_TOKEN ? { 'X-CSRF-Token': CSRF_TOKEN } : undefined
@@ -692,10 +740,12 @@ async function loadData() {
   } catch (err) {
     console.warn('Не удалось загрузить данные с сервера, используем пустые коллекции', err);
     apiOnline = false;
-    setConnectionStatus('Нет соединения с сервером: данные будут только в этой сессии', 'error');
+    setConnectionStatus('Нет соединения с сервером: данные будут только в этой сессии. ' + err.message, 'error');
     cards = [];
     ops = [];
     centers = [];
+  } finally {
+    endRequest();
   }
 
   ensureDefaults();
