@@ -40,8 +40,7 @@ if (!$attachment || empty($attachment['content'])) {
     exit;
 }
 
-$base64 = explode(',', (string)$attachment['content']);
-$payload = end($base64);
+$payload = extract_base64_payload((string)$attachment['content']);
 $binary = base64_decode($payload);
 if ($binary === false) {
     http_response_code(500);
@@ -49,10 +48,22 @@ if ($binary === false) {
     echo 'Corrupted file. Request ID: ' . $requestId;
     exit;
 }
+$size = strlen($binary);
+if ($size > ATTACHMENT_MAX_BYTES) {
+    http_response_code(400);
+    echo 'File too large';
+    exit;
+}
 
-$filename = $attachment['name'] ?? 'file';
-$type = $attachment['type'] ?? 'application/octet-stream';
+try {
+    $filename = sanitize_filename($attachment['name'] ?? 'file');
+    $type = resolve_attachment_type($filename, $attachment['type'] ?? null);
+} catch (InvalidArgumentException $e) {
+    http_response_code(400);
+    echo $e->getMessage();
+    exit;
+}
 header('Content-Type: ' . $type);
-header('Content-Length: ' . strlen($binary));
+header('Content-Length: ' . $size);
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 echo $binary;
