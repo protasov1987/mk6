@@ -50,14 +50,10 @@ function fetch_state(PDO $pdo): array
     if (!is_array($decoded)) {
         $decoded = build_default_data();
     }
-
-    $version = isset($row['version']) ? (int)$row['version'] : 1;
-    if ($version <= 0) {
-        $version = 1;
-        save_state($pdo, $decoded, $version);
+    if (!isset($decoded['version']) || !is_int($decoded['version'])) {
+        $decoded['version'] = 1;
+        save_state($pdo, $decoded);
     }
-
-    $decoded['version'] = $version;
     return $decoded;
 }
 

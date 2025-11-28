@@ -39,7 +39,9 @@ const FIELD_LIMITS = {
 };
 let logContextCardId = null;
 let clockIntervalId = null;
-let activeRequests = 0;
+let snapshotVersion = 0;
+let pollIntervalId = null;
+const POLL_INTERVAL_MS = 15000;
 
 function setConnectionStatus(message, variant = 'info') {
   const banner = document.getElementById('server-status');
@@ -737,6 +739,41 @@ function ensureOperationCodes() {
   });
 }
 
+function mergeCollectionsById(current = [], incoming = []) {
+  const incomingIds = new Set();
+  const merged = incoming.map(item => {
+    const id = item && item.id ? item.id : null;
+    const existing = current.find(entry => entry && entry.id === id);
+    if (id) incomingIds.add(id);
+    return existing ? { ...existing, ...item } : { ...item };
+  });
+  current.forEach(item => {
+    if (!item || !item.id) return;
+    if (!incomingIds.has(item.id)) {
+      merged.push({ ...item });
+    }
+  });
+  return merged;
+}
+
+function applyServerSnapshot(payload) {
+  const incomingCards = Array.isArray(payload.cards) ? payload.cards : [];
+  const incomingOps = Array.isArray(payload.ops) ? payload.ops : [];
+  const incomingCenters = Array.isArray(payload.centers) ? payload.centers : [];
+
+  centers = mergeCollectionsById(centers, incomingCenters);
+  ops = mergeCollectionsById(ops, incomingOps);
+  cards = mergeCollectionsById(cards, incomingCards).map(card => {
+    const next = { ...card };
+    ensureAttachments(next);
+    ensureCardMeta(next);
+    recalcCardStatus(next);
+    return next;
+  });
+  ensureOperationCodes();
+  renderEverything();
+}
+
 // === ХРАНИЛИЩЕ ===
 async function saveData() {
   if (!apiOnline) {
@@ -752,10 +789,22 @@ async function saveData() {
         'Content-Type': 'application/json',
         'X-CSRF-Token': CSRF_TOKEN
       },
-      body: JSON.stringify({ cards, ops, centers })
+      body: JSON.stringify({ version: snapshotVersion || 1, cards, ops, centers })
     });
+    if (res.status === 409) {
+      const payload = await res.json().catch(() => ({}));
+      const serverVersion = typeof payload.currentVersion === 'number' ? payload.currentVersion : null;
+      if (serverVersion) snapshotVersion = serverVersion;
+      setConnectionStatus('Данные устарели. Обновляем состояние…', 'warning');
+      await fetchLatestSnapshot({ forceApply: true });
+      return;
+    }
     if (!res.ok) {
       throw new Error('Ответ сервера ' + res.status);
+    }
+    const payload = await res.json().catch(() => ({}));
+    if (payload && typeof payload.version === 'number') {
+      snapshotVersion = payload.version;
     }
     setConnectionStatus('', 'info');
   } catch (err) {
@@ -824,6 +873,7 @@ async function loadData() {
     });
     if (!res.ok) throw new Error('Ответ сервера ' + res.status);
     const payload = await res.json();
+    snapshotVersion = typeof payload.version === 'number' ? payload.version : 1;
     cards = Array.isArray(payload.cards) ? payload.cards : [];
     ops = Array.isArray(payload.ops) ? payload.ops : [];
     centers = Array.isArray(payload.centers) ? payload.centers : [];
@@ -836,8 +886,7 @@ async function loadData() {
     cards = [];
     ops = [];
     centers = [];
-  } finally {
-    endRequest();
+    snapshotVersion = snapshotVersion || 1;
   }
 
   ensureDefaults();
@@ -877,6 +926,38 @@ async function loadData() {
   if (apiOnline) {
     await saveData();
   }
+}
+
+async function fetchLatestSnapshot(options = {}) {
+  const { silent = false, forceApply = false } = options;
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      headers: CSRF_TOKEN ? { 'X-CSRF-Token': CSRF_TOKEN } : undefined
+    });
+    if (!res.ok) throw new Error('Ответ сервера ' + res.status);
+    const payload = await res.json();
+    const incomingVersion = typeof payload.version === 'number' ? payload.version : snapshotVersion;
+    apiOnline = true;
+    if (incomingVersion && (forceApply || incomingVersion > snapshotVersion)) {
+      snapshotVersion = incomingVersion;
+      applyServerSnapshot(payload);
+    }
+    if (!silent) {
+      setConnectionStatus('', 'info');
+    }
+  } catch (err) {
+    apiOnline = false;
+    if (!silent) {
+      setConnectionStatus('Не удалось получить обновлённые данные: ' + err.message, 'error');
+    }
+  }
+}
+
+function startPolling() {
+  if (pollIntervalId) clearInterval(pollIntervalId);
+  pollIntervalId = setInterval(() => {
+    fetchLatestSnapshot({ silent: true });
+  }, POLL_INTERVAL_MS);
 }
 
 // === РЕНДЕРИНГ ДАШБОРДА ===
@@ -2822,4 +2903,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupLogModal();
   renderEverything();
   setInterval(tickTimers, 1000);
+  startPolling();
 });
