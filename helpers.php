@@ -1,6 +1,93 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+const ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024;
+const ATTACHMENT_ALLOWED_TYPES = [
+    'pdf' => 'application/pdf',
+    'doc' => 'application/msword',
+    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'jpg' => 'image/jpeg',
+    'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'zip' => 'application/zip',
+    'rar' => 'application/x-rar-compressed',
+    '7z' => 'application/x-7z-compressed',
+];
+
+function sanitize_filename(string $name): string
+{
+    $normalized = basename(str_replace('\\', '/', $name));
+    $normalized = preg_replace('/\.{2,}/', '.', $normalized);
+    $normalized = preg_replace('/[^\p{L}\p{N}._-]+/u', '_', $normalized);
+    $normalized = trim($normalized, " \t\n\r\0\x0B");
+
+    if ($normalized === '') {
+        $normalized = 'file';
+    }
+
+    return mb_substr($normalized, 0, 255);
+}
+
+function extract_base64_payload(string $content): string
+{
+    $parts = explode(',', $content, 2);
+    return end($parts);
+}
+
+function resolve_attachment_type(string $name, ?string $type): string
+{
+    $ext = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+    $allowedType = ATTACHMENT_ALLOWED_TYPES[$ext] ?? null;
+
+    if (!$allowedType) {
+        throw new InvalidArgumentException('Недопустимый тип файла');
+    }
+
+    if ($type && strcasecmp($type, $allowedType) !== 0) {
+        throw new InvalidArgumentException('Недопустимый MIME-тип файла');
+    }
+
+    return $allowedType;
+}
+
+function sanitize_attachment(array $attachment): array
+{
+    $name = sanitize_filename((string)($attachment['name'] ?? 'file'));
+    $type = resolve_attachment_type($name, isset($attachment['type']) ? (string)$attachment['type'] : null);
+    $sanitized = $attachment;
+    $sanitized['name'] = $name;
+    $sanitized['type'] = $type;
+
+    if (isset($attachment['content'])) {
+        $payload = extract_base64_payload((string)$attachment['content']);
+        $decoded = base64_decode($payload, true);
+        if ($decoded === false) {
+            throw new InvalidArgumentException('Некорректное содержимое файла');
+        }
+        if (strlen($decoded) > ATTACHMENT_MAX_BYTES) {
+            throw new InvalidArgumentException('Файл превышает максимально допустимый размер');
+        }
+        $sanitized['content'] = $attachment['content'];
+        $sanitized['size'] = strlen($decoded);
+    } elseif (isset($attachment['size']) && is_int($attachment['size']) && $attachment['size'] > ATTACHMENT_MAX_BYTES) {
+        throw new InvalidArgumentException('Файл превышает максимально допустимый размер');
+    }
+
+    return $sanitized;
+}
+
+function sanitize_card_attachments(array $attachments): array
+{
+    $clean = [];
+    foreach ($attachments as $idx => $attachment) {
+        if (!is_array($attachment)) {
+            throw new InvalidArgumentException("Вложение #{$idx} имеет неверный формат");
+        }
+        $clean[] = sanitize_attachment($attachment);
+    }
+    return $clean;
+}
+
 function gen_id(string $prefix): string
 {
     $micros = (int)round(microtime(true) * 1000000);
@@ -150,6 +237,10 @@ function merge_snapshots(array $current, array $incoming): array
             }
         }
         $next = deep_clone($card);
+        if (!isset($next['attachments']) || !is_array($next['attachments'])) {
+            $next['attachments'] = [];
+        }
+        $next['attachments'] = sanitize_card_attachments($next['attachments']);
         $next['createdAt'] = $existing['createdAt'] ?? ($next['createdAt'] ?? round(microtime(true) * 1000));
         if (!isset($next['logs']) || !is_array($next['logs'])) {
             $next['logs'] = [];
