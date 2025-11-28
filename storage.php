@@ -61,7 +61,7 @@ function fetch_state(PDO $pdo): array
     return $decoded;
 }
 
-function save_state(PDO $pdo, array $state, ?int $version = null): int
+function save_state(PDO $pdo, array $state, ?int $version = null, ?int $expectedVersion = null): int
 {
     $payload = $state;
     unset($payload['version']);
@@ -69,12 +69,25 @@ function save_state(PDO $pdo, array $state, ?int $version = null): int
     ensure_state_table($pdo);
     $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     $version = $version ?? 1;
-    if ($driver === 'sqlite') {
-        $stmt = $pdo->prepare('INSERT INTO app_state (id, data, version) VALUES (1, :data, :version) ON CONFLICT(id) DO UPDATE SET data = excluded.data, version = excluded.version');
-    } else {
-        $stmt = $pdo->prepare('INSERT INTO app_state (id, data, version) VALUES (1, :data, :version) ON DUPLICATE KEY UPDATE data = VALUES(data), version = VALUES(version)');
+    if ($expectedVersion === null) {
+        if ($driver === 'sqlite') {
+            $stmt = $pdo->prepare('INSERT INTO app_state (id, data, version) VALUES (1, :data, :version) ON CONFLICT(id) DO UPDATE SET data = excluded.data, version = excluded.version');
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO app_state (id, data, version) VALUES (1, :data, :version) ON DUPLICATE KEY UPDATE data = VALUES(data), version = VALUES(version)');
+        }
+        $stmt->execute(['data' => $json, 'version' => $version]);
+        return $version;
     }
-    $stmt->execute(['data' => $json, 'version' => $version]);
+
+    if ($driver === 'sqlite') {
+        $stmt = $pdo->prepare('UPDATE app_state SET data = :data, version = :version WHERE id = 1 AND version = :expectedVersion');
+    } else {
+        $stmt = $pdo->prepare('UPDATE app_state SET data = :data, version = :version WHERE id = 1 AND version = :expectedVersion');
+    }
+    $stmt->execute(['data' => $json, 'version' => $version, 'expectedVersion' => $expectedVersion]);
+    if ($stmt->rowCount() === 0) {
+        throw new SnapshotConflictException('Данные устарели, перезагрузите страницу');
+    }
 
     return $version;
 }

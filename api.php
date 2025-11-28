@@ -259,7 +259,7 @@ try {
         ensure_operation_codes($incoming);
         $newVersion = ($current['version'] ?? 0) + 1;
         $incoming['version'] = $newVersion;
-        save_state($pdo, $incoming, $newVersion);
+        save_state($pdo, $incoming, $newVersion, $current['version'] ?? null);
         echo json_encode(['status' => 'ok', 'version' => $newVersion]);
         exit;
     }
