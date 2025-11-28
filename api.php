@@ -4,14 +4,31 @@ require_once __DIR__ . '/storage.php';
 header('Content-Type: application/json; charset=utf-8');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+$requestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? bin2hex(random_bytes(8));
+header('X-Request-Id: ' . $requestId);
+
 require_auth();
 
-function log_validation_issue(string $message): void
+function log_api_issue(string $message, string $requestId): void
+{
+    $formatted = sprintf('[api][request:%s] %s', $requestId, $message);
+    $logFile = __DIR__ . '/api_errors.log';
+    error_log($formatted);
+    file_put_contents($logFile, date('c') . ' ' . $formatted . PHP_EOL, FILE_APPEND);
+}
+
+function log_validation_issue(string $message, string $requestId): void
 {
     $formatted = '[api validation] ' . $message;
     $logFile = __DIR__ . '/api_validation.log';
-    error_log($formatted);
-    file_put_contents($logFile, date('c') . ' ' . $formatted . PHP_EOL, FILE_APPEND);
+    error_log(sprintf('[request:%s] %s', $requestId, $formatted));
+    file_put_contents($logFile, date('c') . " [request:{$requestId}] " . $formatted . PHP_EOL, FILE_APPEND);
+}
+
+function respond_json(array $payload, string $requestId): void
+{
+    $payload['requestId'] = $requestId;
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
 }
 
 function validate_string_field($value, string $field, int $maxLength, bool $allowEmpty = true): ?string
@@ -216,9 +233,9 @@ try {
     if ($method === 'GET') {
         $state = fetch_state($pdo);
         ensure_operation_codes($state);
-        echo json_encode($state, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
+            respond_json($state, $requestId);
+            exit;
+        }
 
     if ($method === 'POST') {
         validate_csrf();
@@ -226,14 +243,16 @@ try {
         $payload = json_decode($raw, true);
         if (!is_array($payload)) {
             http_response_code(400);
-            echo json_encode(['error' => 'Некорректный JSON']);
+            log_api_issue('Некорректный JSON', $requestId);
+            respond_json(['error' => 'Некорректный JSON'], $requestId);
             exit;
         }
         $error = validate_payload($payload);
         if ($error !== null) {
             http_response_code(400);
-            log_validation_issue($error);
-            echo json_encode(['error' => $error]);
+            log_validation_issue($error, $requestId);
+            log_api_issue('Ошибка валидации входных данных: ' . $error, $requestId);
+            respond_json(['error' => $error], $requestId);
             exit;
         }
         $current = fetch_state($pdo);
@@ -245,13 +264,15 @@ try {
         $incoming = merge_snapshots($current, $incoming);
         ensure_operation_codes($incoming);
         save_state($pdo, $incoming);
-        echo json_encode(['status' => 'ok']);
+        respond_json(['status' => 'ok'], $requestId);
         exit;
     }
 
     http_response_code(405);
-    echo json_encode(['error' => 'Метод не поддерживается']);
+    log_api_issue('Метод не поддерживается: ' . $method, $requestId);
+    respond_json(['error' => 'Метод не поддерживается'], $requestId);
 } catch (Throwable $e) {
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    log_api_issue('Внутренняя ошибка: ' . $e->getMessage(), $requestId);
+    respond_json(['error' => $e->getMessage()], $requestId);
 }
