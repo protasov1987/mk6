@@ -251,8 +251,8 @@ try {
 
     http_response_code(405);
     echo json_encode(['error' => 'Метод не поддерживается']);
-} catch (InvalidArgumentException $e) {
-    http_response_code(400);
+} catch (SnapshotConflictException $e) {
+    http_response_code(409);
     echo json_encode(['error' => $e->getMessage()]);
 } catch (Throwable $e) {
     http_response_code(500);
