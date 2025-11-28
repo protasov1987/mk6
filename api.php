@@ -210,7 +210,7 @@ function validate_payload(array $payload): ?string
             if (isset($file['size']) && (!is_int($file['size']) || $file['size'] < 0)) {
                 return 'Поле cards.attachments.size должно быть неотрицательным целым числом';
             }
-            if (isset($file['content']) && ($error = validate_base64_content($file['content'], 'cards.attachments.content', 2 * 1024 * 1024))) {
+            if (isset($file['content']) && ($error = validate_base64_content($file['content'], 'cards.attachments.content', ATTACHMENT_MAX_BYTES))) {
                 return $error;
             }
         }
@@ -266,6 +266,9 @@ try {
 
     http_response_code(405);
     echo json_encode(['error' => 'Метод не поддерживается']);
+} catch (SnapshotConflictException $e) {
+    http_response_code(409);
+    echo json_encode(['error' => $e->getMessage()]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
