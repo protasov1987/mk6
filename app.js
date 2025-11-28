@@ -1,5 +1,6 @@
 // === КОНСТАНТЫ И ГЛОБАЛЬНЫЕ МАССИВЫ ===
 const API_ENDPOINT = '/api.php';
+const CSRF_TOKEN = window.CSRF_TOKEN || (document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
 let cards = [];
 let ops = [];
@@ -610,7 +611,10 @@ async function saveData() {
 
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF_TOKEN
+      },
       body: JSON.stringify({ cards, ops, centers })
     });
     if (!res.ok) {
@@ -675,7 +679,9 @@ function ensureDefaults() {
 
 async function loadData() {
   try {
-    const res = await fetch(API_ENDPOINT);
+    const res = await fetch(API_ENDPOINT, {
+      headers: CSRF_TOKEN ? { 'X-CSRF-Token': CSRF_TOKEN } : undefined
+    });
     if (!res.ok) throw new Error('Ответ сервера ' + res.status);
     const payload = await res.json();
     cards = Array.isArray(payload.cards) ? payload.cards : [];
