@@ -27,6 +27,10 @@ function fetch_state(PDO $pdo): array
         $decoded = build_default_data();
         save_state($pdo, $decoded);
     }
+    if (!isset($decoded['version']) || !is_int($decoded['version'])) {
+        $decoded['version'] = 1;
+        save_state($pdo, $decoded);
+    }
     return $decoded;
 }
 

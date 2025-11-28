@@ -92,6 +92,7 @@ function create_route_op_from_refs(array $op, array $center, string $executor = 
 
 function build_default_data(): array
 {
+    $version = 1;
     $centers = [
         ['id' => gen_id('wc'), 'name' => 'Механическая обработка', 'desc' => 'Токарные и фрезерные операции'],
         ['id' => gen_id('wc'), 'name' => 'Покрытия / напыление', 'desc' => 'Покрытия, термическое напыление'],
@@ -128,7 +129,7 @@ function build_default_data(): array
         ],
     ]];
 
-    return ['cards' => $cards, 'ops' => $ops, 'centers' => $centers];
+    return ['version' => $version, 'cards' => $cards, 'ops' => $ops, 'centers' => $centers];
 }
 
 function deep_clone($value)

@@ -45,6 +45,9 @@ function validate_base64_content($value, string $field, int $maxBytes): ?string
 
 function validate_payload(array $payload): ?string
 {
+    if (!isset($payload['version']) || !is_int($payload['version']) || $payload['version'] < 1) {
+        return 'Поле version должно быть положительным целым числом';
+    }
     $cards = $payload['cards'] ?? [];
     $ops = $payload['ops'] ?? [];
     $centers = $payload['centers'] ?? [];
@@ -237,15 +240,23 @@ try {
             exit;
         }
         $current = fetch_state($pdo);
+        $currentVersion = isset($current['version']) && is_int($current['version']) ? $current['version'] : 1;
+        if ($payload['version'] !== $currentVersion) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Состояние устарело', 'currentVersion' => $currentVersion]);
+            exit;
+        }
         $incoming = [
             'cards' => $payload['cards'] ?? [],
             'ops' => $payload['ops'] ?? [],
             'centers' => $payload['centers'] ?? [],
+            'version' => $payload['version'],
         ];
         $incoming = merge_snapshots($current, $incoming);
         ensure_operation_codes($incoming);
+        $incoming['version'] = $currentVersion + 1;
         save_state($pdo, $incoming);
-        echo json_encode(['status' => 'ok']);
+        echo json_encode(['status' => 'ok', 'version' => $incoming['version']]);
         exit;
     }
 

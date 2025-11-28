@@ -124,6 +124,11 @@ nav {
   color: #075985;
 }
 
+.status-banner.status-warning {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
 .hidden {
   display: none;
 }
